@@ -1,5 +1,7 @@
 # Super STT — Deepgram backend
 
+[![coverage](https://img.shields.io/endpoint?url=https://jorge-menjivar.github.io/super-stt-deepgram/coverage.json)](https://jorge-menjivar.github.io/super-stt-deepgram/)
+
 A speech-to-text backend for **[Super STT](https://github.com/jorge-menjivar/super-stt)**.
 It proxies audio to [Deepgram](https://deepgram.com/)'s hosted transcription API, so
 transcription runs in the cloud rather than on your machine.
