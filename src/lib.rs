@@ -138,6 +138,9 @@ mod component {
                 })),
             );
         };
+        // Internal test seam: `base_url` is not a declared manifest option, so
+        // the daemon never sends this header in production — the default is always
+        // used. The round-trip tests inject it to reach a mock upstream.
         let base_url = header(&entries, "x-stt-option-base_url")
             .unwrap_or_else(|| "https://api.deepgram.com".to_string());
         let model = header(&entries, "x-stt-model").unwrap_or_else(|| "nova-3".to_string());

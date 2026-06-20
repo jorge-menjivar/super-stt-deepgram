@@ -26,8 +26,6 @@ are involved.
 | -------------- | -------- | ------ | --------- | ------------------- |
 | `nova-3`       | deepgram | online | en        | Deepgram API key    |
 
-The API base URL is overridable (the `base_url` option) for gateways/proxies.
-
 ## What's in here
 
 A small, self-contained Rust `wasi:http` component (`src/lib.rs`) that speaks the Super
