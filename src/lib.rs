@@ -210,6 +210,10 @@ mod component {
         let scheme = if https { Scheme::Https } else { Scheme::Http };
 
         let path = if let Some(lang) = language {
+            // The daemon's reserved `auto` means "detect"; Deepgram's equivalent
+            // is its multilingual code-switching mode. Other tags (including
+            // region variants like `es-419`) pass through unchanged.
+            let lang = if lang == "auto" { "multi" } else { lang };
             format!("/v1/listen?model={model}&smart_format=true&language={lang}")
         } else {
             format!("/v1/listen?model={model}&smart_format=true")

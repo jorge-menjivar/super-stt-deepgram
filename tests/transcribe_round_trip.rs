@@ -9,7 +9,7 @@
 mod common;
 
 use common::{WasmBackend, component_path};
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const SECRET: &str = "x-stt-secret-deepgram_api_key";
@@ -58,6 +58,46 @@ async fn transcribe_round_trip() {
         .await
         .expect("transcription should succeed");
     assert_eq!(text, "hello world");
+}
+
+/// The daemon's reserved `auto` (detect) maps to Deepgram's `multi` multilingual
+/// code-switching mode in the upstream query string; other tags pass through.
+#[tokio::test]
+async fn auto_language_maps_to_multi() {
+    let Some(component) = component_path() else {
+        eprintln!("skipping: component not built (run `just build-component`)");
+        return;
+    };
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/listen"))
+        .and(query_param("language", "multi"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": { "channels": [{ "alternatives": [{ "transcript": "hola mundo" }] }] }
+        })))
+        .mount(&server)
+        .await;
+
+    let authority = server.address().to_string();
+    let mut backend = WasmBackend::new(
+        &component,
+        vec![authority.clone()],
+        "nova-3".to_string(),
+        vec![
+            (SECRET.to_string(), "test-key".to_string()),
+            (BASE_URL.to_string(), format!("http://{authority}")),
+        ],
+    )
+    .expect("load backend")
+    .permit_loopback_egress();
+
+    let audio = vec![0.0_f32; 1600];
+    let text = backend
+        .transcribe_with_language(&audio, 16000, Some("auto"))
+        .await
+        .expect("transcription should succeed");
+    assert_eq!(text, "hola mundo");
 }
 
 /// The allowlist blocks egress to a host the configuration does not permit, even

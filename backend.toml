@@ -30,5 +30,31 @@
     provider = "deepgram"
     multilingual = true
     primary_language = "en"
-    supported_languages = ["en"]
+    # nova-3 batch language codes (Deepgram's exact `language=` values, forwarded
+    # verbatim), including regional/script variants. Auto-detect is the reserved
+    # `language=auto`, which the component maps to Deepgram's `multi` mode.
+    supported_languages = [
+        "ar", "ar-AE", "ar-SA", "ar-QA", "ar-KW", "ar-SY", "ar-LB", "ar-PS", "ar-JO", "ar-EG", "ar-SD", "ar-TD", "ar-MA", "ar-DZ", "ar-TN", "ar-IQ", "ar-IR",
+        "be", "bn", "bs", "bg", "ca",
+        "zh", "zh-CN", "zh-Hans", "zh-TW", "zh-Hant", "zh-HK",
+        "hr", "cs",
+        "da", "da-DK",
+        "nl", "nl-BE",
+        "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
+        "et", "fi",
+        "fr", "fr-CA",
+        "de", "de-CH",
+        "el",
+        "gu", "gu-IN",
+        "he", "hi", "hu", "id", "it", "ja", "kn",
+        "ko", "ko-KR",
+        "lv", "lt", "mk", "ms", "mr", "no", "fa", "pl",
+        "pt", "pt-BR", "pt-PT",
+        "ro", "ru", "sr", "sk", "sl",
+        "es", "es-419",
+        "sv", "sv-SE",
+        "tl", "ta", "te",
+        "th", "th-TH",
+        "tr", "uk", "ur", "vi",
+    ]
     supported_devices = ["none"]
