@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
-#:schema https://jorge-menjivar.github.io/super-stt/backend.schema.json
+#:schema https://jorge-menjivar.github.io/super-voice/backend.schema.json
 # Deepgram backend configuration. See docs/protocol/backend/config.md.
 
 [backend]
+    id     = "app.super-stt.deepgram"
     source = "github.com/jorge-menjivar/super-stt-deepgram"
     name = "Deepgram"
     version = "0.1.0"
     kind = "wasm"
     entrypoint = "deepgram.wasm"
+    product  = "super-voice"
     contract = "v1"
     license = "GPL-3.0-only"
     description = "Cloud speech-to-text via the Deepgram API."
@@ -28,6 +30,7 @@
 
 [[models]]
     name = "nova-3"
+    role = "transcription"
     provider = "deepgram"
     multilingual = true
     primary_language = "en"
