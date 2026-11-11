@@ -42,33 +42,48 @@ pub fn header(entries: &[(String, Vec<u8>)], want: &str) -> Option<String> {
     })
 }
 
-/// The most vocabulary terms sent as keyterms.
-///
-/// Deepgram's own limit is 500 tokens across all keyterms, counted by its
-/// tokenizer, so a client cannot hold a request to it exactly. This cap only
-/// keeps a long vocabulary from making a very long URL; a request still past
-/// the token limit is refused, and sent again without keyterms.
+/// The most vocabulary terms sent as keyterms, the number Deepgram's keyterm
+/// guide names.
 pub const MAX_KEYTERMS: usize = 100;
+
+/// The most bytes of term text sent as keyterms.
+///
+/// Deepgram's limit is 500 tokens across all keyterms, counted by its own
+/// tokenizer, which a client cannot run. Names and rare words come close to
+/// two bytes a token, so 1000 bytes keeps even a vocabulary of them inside the
+/// limit; ordinary words take fewer tokens, so most vocabularies are well
+/// inside. The protocol asks a backend to truncate rather than let the
+/// request fail, and this is that truncation: a vocabulary past the budget
+/// loses its last terms, not all of them.
+pub const MAX_KEYTERM_BYTES: usize = 1000;
 
 /// The user's vocabulary as Deepgram keyterms.
 ///
 /// `raw_vocabulary` is `x-voice-vocabulary`, a JSON array of strings that the
 /// daemon escapes to pure ASCII, so `serde_json` is the whole decode. A
 /// keyterm may be a phrase, so each term keeps its words together, with its
-/// whitespace collapsed; empty and repeated terms are dropped. A header that
-/// will not parse gives no keyterms rather than failing the request: losing
-/// the vocabulary should not lose the recording.
+/// whitespace collapsed; empty and repeated terms are dropped. The list stops
+/// at the first term past [`MAX_KEYTERMS`] or [`MAX_KEYTERM_BYTES`], keeping
+/// the user's order. A header that will not parse gives no keyterms rather
+/// than failing the request: losing the vocabulary should not lose the
+/// recording.
 #[must_use]
 pub fn keyterms(raw_vocabulary: Option<&str>) -> Vec<String> {
     let terms: Vec<String> = raw_vocabulary
         .and_then(|raw| serde_json::from_str(raw).ok())
         .unwrap_or_default();
     let mut out: Vec<String> = Vec::new();
+    let mut bytes = 0;
     for term in &terms {
         let term = term.split_whitespace().collect::<Vec<_>>().join(" ");
-        if !term.is_empty() && !out.contains(&term) && out.len() < MAX_KEYTERMS {
-            out.push(term);
+        if term.is_empty() || out.contains(&term) {
+            continue;
         }
+        if out.len() == MAX_KEYTERMS || bytes + term.len() > MAX_KEYTERM_BYTES {
+            break;
+        }
+        bytes += term.len();
+        out.push(term);
     }
     out
 }
@@ -293,9 +308,9 @@ mod component {
     ///
     /// A request carrying keyterms that Deepgram answers with `400` is sent
     /// again without them. Deepgram refuses the whole request over its
-    /// keyterms, when they run past its 500-token limit for one, and a
-    /// vocabulary it will not take should cost the vocabulary, not the
-    /// recording.
+    /// keyterms, when they run past its 500-token limit for one, which the
+    /// budget in [`keyterms`] makes rare but cannot rule out. A vocabulary it
+    /// will not take should cost the vocabulary, not the recording.
     fn call_deepgram(
         base_url: &str,
         api_key: &str,
@@ -450,8 +465,8 @@ mod component {
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_KEYTERMS, encode_wav, header, keyterms, listen_path, parse_base, parse_transcript,
-        query_escape,
+        MAX_KEYTERM_BYTES, MAX_KEYTERMS, encode_wav, header, keyterms, listen_path, parse_base,
+        parse_transcript, query_escape,
     };
 
     /// A header is found under its `x-voice-` name first, and then under its
@@ -498,6 +513,23 @@ mod tests {
         let kept = keyterms(Some(&raw));
         assert_eq!(kept.len(), MAX_KEYTERMS);
         assert_eq!(kept[..], terms[..MAX_KEYTERMS]);
+    }
+
+    /// A vocabulary past the byte budget loses its last terms, not all of
+    /// them, and keeps the user's order.
+    #[test]
+    fn the_keyterms_stop_at_their_byte_budget() {
+        let long = "x".repeat(300);
+        let terms = [
+            long.clone(),
+            format!("{long}a"),
+            format!("{long}b"),
+            format!("{long}c"),
+            "short".to_string(),
+        ];
+        let kept = keyterms(Some(&serde_json::to_string(&terms).unwrap()));
+        assert_eq!(kept[..], terms[..3]);
+        assert!(kept.iter().map(String::len).sum::<usize>() <= MAX_KEYTERM_BYTES);
     }
 
     /// Everything but the unreserved characters is escaped, so a term can
