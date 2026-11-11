@@ -20,6 +20,12 @@
 [network]
     allowed_hosts = ["api.deepgram.com"]
 
+[capabilities]
+    # Opts into being handed the user's dictation context as `x-voice-prompt`
+    # and `x-voice-vocabulary`. The vocabulary goes to Deepgram as keyterms.
+    # Deepgram takes terms, not instructions, so the prompt is not sent.
+    context = true
+
 [[secrets]]
     name = "deepgram_api_key"
     label = "Deepgram API key"
