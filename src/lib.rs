@@ -46,16 +46,22 @@ pub fn header(entries: &[(String, Vec<u8>)], want: &str) -> Option<String> {
 /// guide names.
 pub const MAX_KEYTERMS: usize = 100;
 
-/// The most bytes of term text sent as keyterms.
+/// The most UTF-8 bytes of term text sent as keyterms.
 ///
 /// Deepgram's limit is 500 tokens across all keyterms, counted by its own
-/// tokenizer, which a client cannot run. Names and rare words come close to
-/// two bytes a token, so 1000 bytes keeps even a vocabulary of them inside the
-/// limit; ordinary words take fewer tokens, so most vocabularies are well
-/// inside. The protocol asks a backend to truncate rather than let the
-/// request fail, and this is that truncation: a vocabulary past the budget
-/// loses its last terms, not all of them.
-pub const MAX_KEYTERM_BYTES: usize = 1000;
+/// tokenizer, which a client cannot run, so this is measured against it
+/// instead. Made-up nine-letter names, the hardest text for it short of
+/// strings with no vowels, reached 500 tokens at 76 terms and 684 bytes. At
+/// 600 bytes Deepgram took made-up names of six to twelve letters, accented
+/// European and Vietnamese names, and Chinese and Japanese names. A hundred
+/// real proper nouns and tool names, 772 bytes, also fit, so the budget gives
+/// up a little of a long ordinary vocabulary to keep a hard one from being
+/// refused.
+///
+/// The protocol asks a backend to truncate rather than let the request fail,
+/// and this is that truncation: a vocabulary past the budget loses its last
+/// terms, not all of them.
+pub const MAX_KEYTERM_BYTES: usize = 600;
 
 /// The user's vocabulary as Deepgram keyterms.
 ///
@@ -519,16 +525,17 @@ mod tests {
     /// them, and keeps the user's order.
     #[test]
     fn the_keyterms_stop_at_their_byte_budget() {
-        let long = "x".repeat(300);
+        // Two of these fit and a third does not; the short term after it is
+        // past the cut too, so the user's order is kept.
+        let long = "x".repeat(MAX_KEYTERM_BYTES / 3);
         let terms = [
             long.clone(),
             format!("{long}a"),
             format!("{long}b"),
-            format!("{long}c"),
             "short".to_string(),
         ];
         let kept = keyterms(Some(&serde_json::to_string(&terms).unwrap()));
-        assert_eq!(kept[..], terms[..3]);
+        assert_eq!(kept[..], terms[..2]);
         assert!(kept.iter().map(String::len).sum::<usize>() <= MAX_KEYTERM_BYTES);
     }
 
