@@ -33,7 +33,7 @@
     hyper = { version = "1", features = ["http1"] }
     serde_json = "1.0.150"
     tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-    wasmtime = { version = "45.0.0", features = ["async"] }
-    wasmtime-wasi = "45.0.0"
-    wasmtime-wasi-http = "45.0.0"
+    wasmtime = { version = "48.0.8", features = ["async"] }
+    wasmtime-wasi = "48.0.8"
+    wasmtime-wasi-http = "48.0.8"
     wiremock = "0.6.5"

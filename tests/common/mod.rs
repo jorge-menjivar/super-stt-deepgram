@@ -20,14 +20,16 @@ use http_body_util::BodyExt;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::bindings::ProxyPre;
-use wasmtime_wasi_http::p2::bindings::http::types::{ErrorCode, Scheme};
-use wasmtime_wasi_http::p2::body::HyperOutgoingBody;
-use wasmtime_wasi_http::p2::types::{HostFutureIncomingResponse, OutgoingRequestConfig};
-use wasmtime_wasi_http::p2::{
-    HttpResult, WasiHttpCtxView, WasiHttpHooks, WasiHttpView, default_send_request,
+use wasmtime_wasi_http::p2::bindings::http::types::Scheme;
+use wasmtime_wasi_http::{
+    Error as HttpError, RequestOptions, WasiBody, WasiHttpCtx, WasiHttpCtxView, WasiHttpHooks,
+    WasiHttpView, default_send_request,
 };
+
+/// What `send_request` hands back for the response's I/O: it resolves once the
+/// response body has been read, or failed.
+type IoFuture = Box<dyn Future<Output = Result<(), HttpError>> + Send>;
 
 /// Path to the prebuilt component (`just build-component`), or `None` if it
 /// isn't built — tests skip gracefully in that case so a partial `cargo test`
@@ -79,23 +81,20 @@ struct AllowlistHooks {
     allow_loopback: bool,
 }
 
-impl WasiHttpHooks for AllowlistHooks {
-    fn send_request(
-        &mut self,
-        request: hyper::Request<HyperOutgoingBody>,
-        config: OutgoingRequestConfig,
-    ) -> HttpResult<HostFutureIncomingResponse> {
+impl AllowlistHooks {
+    /// Whether the component may reach the request's host: it must be on the
+    /// allowlist, and must not resolve to an address the SSRF guard refuses.
+    fn check(&self, request: &hyper::Request<WasiBody>) -> Result<(), HttpError> {
         let authority = request.uri().authority().map(|a| a.as_str().to_string());
         let host = request.uri().host().map(str::to_string);
         let allowed = self.allowed_hosts.iter().any(|a| {
             Some(a.as_str()) == authority.as_deref() || Some(a.as_str()) == host.as_deref()
         });
         if !allowed {
-            return Err(ErrorCode::InternalError(Some(format!(
+            return Err(HttpError::InternalError(Some(format!(
                 "outbound host not allowed: {}",
                 authority.or(host).unwrap_or_default()
-            )))
-            .into());
+            ))));
         }
         if let Some(h) = host.as_deref() {
             let port =
@@ -107,11 +106,33 @@ impl WasiHttpHooks for AllowlistHooks {
                     } else {
                         443
                     });
-            if let Err(msg) = guard_egress_host(h, port, self.allow_loopback) {
-                return Err(ErrorCode::InternalError(Some(msg)).into());
-            }
+            guard_egress_host(h, port, self.allow_loopback)
+                .map_err(|msg| HttpError::InternalError(Some(msg)))?;
         }
-        Ok(default_send_request(request, config))
+        Ok(())
+    }
+}
+
+impl WasiHttpHooks for AllowlistHooks {
+    fn send_request(
+        &mut self,
+        request: hyper::Request<WasiBody>,
+        options: Option<RequestOptions>,
+        fut: IoFuture,
+    ) -> Box<dyn Future<Output = Result<(hyper::Response<WasiBody>, IoFuture), HttpError>> + Send>
+    {
+        // Only the default sender reports response errors through `fut`; this
+        // one hands the request to it, as wasmtime's own default does.
+        _ = fut;
+        let verdict = self.check(&request);
+        Box::new(async move {
+            verdict?;
+            let (response, io) = default_send_request(request, options).await?;
+            Ok((
+                response.map(BodyExt::boxed_unsync),
+                Box::new(io) as IoFuture,
+            ))
+        })
     }
 }
 
@@ -243,7 +264,7 @@ impl WasmBackend {
         let request = builder
             .body(
                 http_body_util::Full::new(bytes::Bytes::from(body))
-                    .map_err(|never: std::convert::Infallible| -> ErrorCode { match never {} }),
+                    .map_err(|never: std::convert::Infallible| -> HttpError { match never {} }),
             )
             .context("building backend request")?;
 
