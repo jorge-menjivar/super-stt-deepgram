@@ -13,7 +13,7 @@
     # user's settings, API key and selected model are named by it.
     source = "github.com/jorge-menjivar/super-stt-deepgram"
     name = "Deepgram"
-    version = "0.1.0"
+    version = "0.2.0"
     kind = "wasm"
     entrypoint = "deepgram.wasm"
     contract = "v1"
