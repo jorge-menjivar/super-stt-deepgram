@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Deepgram speech-to-text backend as a `wasi:http` proxy component.
 //!
-//! Implements the Super STT `/v1` backend contract
+//! Implements the Super Voice `/v1` backend contract
 //! (`docs/protocol/backend/contract.md`) by exporting
 //! `wasi:http/incoming-handler` and dispatching on method + path. The
 //! component is stateless: the daemon injects the API key as the
-//! `x-stt-secret-deepgram_api_key` request header and the model in the
-//! transcribe body, and the component forwards audio to the Deepgram
+//! `x-voice-secret-deepgram_api_key` request header and the model as
+//! `x-voice-model`, and the component forwards audio to the Deepgram
 //! transcription API over `wasi:http/outgoing-handler`.
 //!
 //! The `wasi:http` handler compiles only for `wasm32`; the pure helpers
-//! (`encode_wav`, `parse_base`, `parse_transcript`) build for the host too, so
-//! they are unit-tested natively while the component as a whole is exercised by
-//! the wasmtime harness in `tests/`.
+//! (`header`, `encode_wav`, `parse_base`, `parse_transcript`) build for the
+//! host too, so they are unit-tested natively while the component as a whole is
+//! exercised by the wasmtime harness in `tests/`.
 
 // Casts are intentional in audio/WAV encoding; doc lint trips on brand names.
 #![allow(clippy::cast_possible_truncation, clippy::doc_markdown)]
@@ -20,6 +20,25 @@
 // ── pure helpers (host-testable) ────────────────────────────────────────────
 // `pub` so the non-test host build that backs the integration harness does not
 // flag them as dead code (the wasm handler that calls them is cfg'd out there).
+
+/// Case-insensitive header lookup over `Fields::entries()`.
+///
+/// `want` is the Super Voice name, `x-voice-…`. A request without it is looked
+/// up under its Super STT name, `x-stt-…`: a Super Voice daemon sends every
+/// header under both, and a Super STT daemon only under the old one.
+#[must_use]
+pub fn header(entries: &[(String, Vec<u8>)], want: &str) -> Option<String> {
+    let find = |name: &str| {
+        entries
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| String::from_utf8_lossy(v).into_owned())
+    };
+    find(want).or_else(|| {
+        let rest = want.strip_prefix("x-voice-")?;
+        find(&format!("x-stt-{rest}"))
+    })
+}
 
 /// Split a base URL into `(is_https, authority)` where authority is
 /// `host[:port]`. A bare host (no scheme) is treated as HTTPS.
@@ -79,7 +98,7 @@ pub fn encode_wav(samples: &[f32], sample_rate: u32) -> Vec<u8> {
 // ── wasi:http component (wasm32 only) ───────────────────────────────────────
 #[cfg(target_arch = "wasm32")]
 mod component {
-    use super::{encode_wav, parse_base, parse_transcript};
+    use super::{encode_wav, header, parse_base, parse_transcript};
 
     use wasi::exports::http::incoming_handler::Guest;
     use wasi::http::types::{
@@ -128,7 +147,7 @@ mod component {
     /// the audio body, forward to Deepgram, and return the transcription.
     fn transcribe(request: &IncomingRequest) -> (u16, Vec<u8>) {
         let entries = request.headers().entries();
-        let Some(api_key) = header(&entries, "x-stt-secret-deepgram_api_key") else {
+        let Some(api_key) = header(&entries, "x-voice-secret-deepgram_api_key") else {
             return (
                 400,
                 to_vec(&serde_json::json!({
@@ -141,9 +160,9 @@ mod component {
         // Internal test seam: `base_url` is not a declared manifest option, so
         // the daemon never sends this header in production — the default is always
         // used. The round-trip tests inject it to reach a mock upstream.
-        let base_url = header(&entries, "x-stt-option-base_url")
+        let base_url = header(&entries, "x-voice-option-base_url")
             .unwrap_or_else(|| "https://api.deepgram.com".to_string());
-        let model = header(&entries, "x-stt-model").unwrap_or_else(|| "nova-3".to_string());
+        let model = header(&entries, "x-voice-model").unwrap_or_else(|| "nova-3".to_string());
 
         let Ok(body) = request.consume() else {
             return err(400, "no_body");
@@ -286,14 +305,6 @@ mod component {
         serde_json::to_vec(value).unwrap_or_default()
     }
 
-    /// Case-insensitive header lookup over `Fields::entries()`.
-    fn header(entries: &[(String, Vec<u8>)], want: &str) -> Option<String> {
-        entries
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case(want))
-            .map(|(_, v)| String::from_utf8_lossy(v).into_owned())
-    }
-
     /// Drain an incoming body to bytes.
     fn read_all(body: IncomingBody) -> Result<Vec<u8>, String> {
         let stream = body.stream().map_err(|()| "no_stream".to_string())?;
@@ -345,7 +356,26 @@ mod component {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_wav, parse_base, parse_transcript};
+    use super::{encode_wav, header, parse_base, parse_transcript};
+
+    /// A header is found under its `x-voice-` name first, and then under its
+    /// `x-stt-` one: a Super Voice daemon sends both, a Super STT daemon only
+    /// the old one.
+    #[test]
+    fn a_header_is_read_under_its_super_voice_name_or_its_super_stt_one() {
+        let both = vec![
+            ("X-Voice-Model".to_string(), b"nova-3".to_vec()),
+            ("x-stt-model".to_string(), b"nova-2".to_vec()),
+        ];
+        assert_eq!(header(&both, "x-voice-model").as_deref(), Some("nova-3"));
+
+        let old = vec![("x-stt-model".to_string(), b"nova-2".to_vec())];
+        assert_eq!(header(&old, "x-voice-model").as_deref(), Some("nova-2"));
+
+        assert_eq!(header(&old, "x-voice-prompt"), None);
+        // Only a Super Voice name falls back; any other name is looked up as is.
+        assert_eq!(header(&old, "authorization"), None);
+    }
 
     #[test]
     fn parse_base_splits_scheme_and_authority() {
