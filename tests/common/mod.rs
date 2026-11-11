@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Self-contained wasmtime host harness that "plays the daemon": it loads the
 //! prebuilt Deepgram component and drives the `/v1` contract in-process, exactly
-//! as Super STT's daemon does, while confining the component's outbound egress
+//! as Super Voice's daemon does, while confining the component's outbound egress
 //! to an allowlist with the same SSRF guard. This repo shares no code with
-//! super-stt — the harness is a minimal, independent reimplementation of the
+//! Super Voice — the harness is a minimal, independent reimplementation of the
 //! daemon's `WasmBackend` (batch `/v1` only; no realtime).
 //!
 //! Tests pair this with a `wiremock` mock of the *Deepgram upstream*, so both
@@ -42,7 +42,7 @@ use wasmtime_wasi_http::p2::{
 #[must_use]
 pub fn component_path() -> Option<PathBuf> {
     let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target/wasm32-wasip2/release/super_stt_backend_deepgram.wasm");
+        .join("target/wasm32-wasip2/release/super_voice_backend_deepgram.wasm");
     p.exists().then_some(p)
 }
 

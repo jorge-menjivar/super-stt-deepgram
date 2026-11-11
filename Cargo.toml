@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Standalone Deepgram WASM backend. Depends only on third-party crates — no
-# super-stt code. Its own workspace root, with its own Cargo.lock.
+# Super Voice code. Its own workspace root, with its own Cargo.lock.
 #
 # The library is a `wasi:http` component (cdylib) built for wasm32-wasip2; the
 # `rlib` target lets the host integration tests link/run alongside the wasmtime
 # harness that loads the prebuilt component.
 [package]
-    name = "super-stt-backend-deepgram"
+    name = "super-voice-backend-deepgram"
     version = "0.1.0"
     edition = "2024"
     license = "GPL-3.0-only"
