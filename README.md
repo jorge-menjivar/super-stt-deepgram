@@ -1,53 +1,22 @@
-# Super STT — Deepgram backend
+# Super Voice — Deepgram backend
 
-[![coverage](https://img.shields.io/endpoint?url=https://jorge-menjivar.github.io/super-stt-deepgram/coverage.json)](https://jorge-menjivar.github.io/super-stt-deepgram/)
+[![coverage](https://img.shields.io/endpoint?url=https://super-libre.github.io/super-voice-deepgram/coverage.json)](https://super-libre.github.io/super-voice-deepgram/)
 
-A speech-to-text backend for **[Super STT](https://github.com/jorge-menjivar/super-stt)**.
-It proxies audio to [Deepgram](https://deepgram.com/)'s hosted transcription API, so
-transcription runs in the cloud rather than on your machine.
+[Deepgram](https://developers.deepgram.com/docs/models-languages-overview)'s
+hosted speech-to-text, `nova-3`, as a backend for
+[Super Voice](https://github.com/jorge-menjivar/super-voice). The audio goes to
+Deepgram, so it needs an API key and a connection rather than a GPU. It hears
+your vocabulary: the terms go to the model as
+[keyterms](https://developers.deepgram.com/docs/keyterm) with every recording.
+Deepgram takes terms, not instructions, so your prompt is not sent.
 
-Super STT is an on-device speech-to-text engine. It doesn't ship any models of its own —
-it loads **backends** like this one at runtime. This repo packages Deepgram as one of
-those backends, shipped as a sandboxed **WASM component** (a `wasi:http` proxy).
+## What it is
 
-## Using it
-
-You don't run this directly. Super STT discovers it through its backend registry,
-downloads the prebuilt `.wasm` from this repo's GitHub release, and runs it in-process in
-a WASM sandbox whose only network egress is the allowlisted Deepgram API. To use it,
-install Super STT, enable Deepgram from the app, and add your **Deepgram API key** —
-see the [Super STT docs](https://github.com/jorge-menjivar/super-stt).
-
-## Models
-
-Chosen by `name` when Super STT loads the backend. This is an **online** model: it sends
-audio to Deepgram and needs a Deepgram API key (set in the app); no local GPU or weights
-are involved.
-
-| Model (`name`) | Provider | Type   | Languages | Requires            |
-| -------------- | -------- | ------ | --------- | ------------------- |
-| `nova-3`       | deepgram | online | en        | Deepgram API key    |
-
-## What's in here
-
-A small, self-contained Rust `wasi:http` component (`src/lib.rs`) that speaks the Super
-STT backend protocol (the `/v1` contract) and forwards audio to Deepgram over
-`wasi:http/outgoing-handler`. It shares no code with the Super STT project. The pure
-audio/parsing helpers are unit-tested natively; the component as a whole is exercised by a
-wasmtime harness under `tests/` that loads the built `.wasm` and drives `/v1` against a
-mock upstream.
-
-## Building from source
-
-Most people never need to — Super STT downloads prebuilt releases. For development
-(requires [`just`](https://github.com/casey/just) and the `wasm32-wasip2` target):
-
-```bash
-rustup target add wasm32-wasip2
-just build-component   # builds target/wasm32-wasip2/release/super_stt_backend_deepgram.wasm
-just ci                # format, lint, build, and test
-```
+The Super Voice daemon does not compile model inference in-tree. It discovers
+backends and drives each one over a `/v1` HTTP contract. This is one such
+backend: a sandboxed WebAssembly component that answers `POST /v1/transcribe`,
+with no network access but `api.deepgram.com`.
 
 ## License
 
-GPL-3.0-only.
+GPL-3.0-only. See `LICENSE`.

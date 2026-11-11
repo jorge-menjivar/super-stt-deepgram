@@ -1,11 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-only
-#:schema https://jorge-menjivar.github.io/super-stt/backend.schema.json
+#:schema https://jorge-menjivar.github.io/super-voice/backend.schema.json
 # Deepgram backend configuration. See docs/protocol/backend/config.md.
 
 [backend]
+    # The id names the install directory. Earlier releases declared none, so an
+    # install of one sits in a directory named after the registry entry,
+    # `deepgram`. It moves to this one on update, because the daemon finds it
+    # by `source`.
+    id = "app.super-voice.deepgram"
+    # The repository's old name, which GitHub redirects. `source` is the
+    # backend's identity: installed copies find their updates by it, and the
+    # user's settings, API key and selected model are named by it.
     source = "github.com/jorge-menjivar/super-stt-deepgram"
     name = "Deepgram"
-    version = "0.1.0"
+    version = "0.2.0"
     kind = "wasm"
     entrypoint = "deepgram.wasm"
     contract = "v1"
@@ -19,6 +27,12 @@
 
 [network]
     allowed_hosts = ["api.deepgram.com"]
+
+[capabilities]
+    # Opts into being handed the user's dictation context as `x-voice-prompt`
+    # and `x-voice-vocabulary`. The vocabulary goes to Deepgram as keyterms.
+    # Deepgram takes terms, not instructions, so the prompt is not sent.
+    context = true
 
 [[secrets]]
     name = "deepgram_api_key"

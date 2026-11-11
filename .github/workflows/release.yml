@@ -40,7 +40,7 @@ jobs:
 
       # Rename to the entrypoint / [assets].wasm name the daemon downloads.
       - name: Stage release asset
-        run: cp target/wasm32-wasip2/release/super_stt_backend_deepgram.wasm deepgram.wasm
+        run: cp target/wasm32-wasip2/release/super_voice_backend_deepgram.wasm deepgram.wasm
 
       # Attach the component AND backend.toml. The indexer hashes backend.toml's
       # bytes into the registry's manifest pin, and the daemon re-verifies the
